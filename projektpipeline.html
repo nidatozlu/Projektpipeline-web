@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interaktives Projekt-Pipeline Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Harmony -->
+    <!-- Application Structure Plan: Die Anwendung ist als interaktives Single-Page-Dashboard konzipiert, um die Mängel der statischen Excel-Liste direkt zu beheben. Die Struktur wurde gewählt, um verschiedene Benutzertypen mit ihren spezifischen Informationsbedürfnissen anzusprechen.
+    1. Globale Filterleiste (oben): Ermöglicht allen Nutzern (Institutsleiter, Abteilungsleiter, Mitarbeiter) die Daten nach den für sie relevanten Kriterien (Organisationseinheit, Projektstatus) zu segmentieren. Dies löst das Problem der unterschiedlichen Sichten.
+    2. Daten-Eingabeformular: Ein neues Formular ermöglicht die direkte Eingabe neuer Projekte auf der Seite, was die Aktualisierung und Konsistenz der Daten verbessert. Eine neue LLM-gestützte Funktion generiert Projektbeschreibungen.
+    3. Projektstatus-Ansichten (Kategorien): Eine neue Navigationsleiste mit Buttons für jeden Projektstatus dient als schnelle Filterung und "Kategorieansicht", um Projekte nach ihrem Fortschritt zu gruppieren.
+    4. KPI-Übersicht (Key Performance Indicators): Zeigt aggregierte Live-Daten (Gesamtvolumen, Projektanzahl etc.), die sich mit den Filtern ändern. Dies gibt dem Institutsleiter den schnellen, strategischen Überblick, den er benötigt.
+    5. Visualisierungs-Grid: Eine Reihe von Diagrammen stellt komplexe Zusammenhänge (Statusverteilung, Volumen pro Abteilung, Finanzprognose) visuell und leicht verständlich dar. Dies schafft die fehlende Übersichtlichkeit und hilft bei der schnellen Analyse.
+    6. Detaillierte Projekt-Tabelle: Eine durchsuch- und filterbare Tabelle am Ende dient als "Single Source of Truth". Sie verhindert doppelte Einträge (durch feste Struktur) und bietet Zugriff auf die Detaildaten für Projekt- und Abteilungsleiter.
+    Diese Struktur wurde gewählt, weil sie den Nutzer von einem allgemeinen Überblick (KPIs) über visuelle Analysen (Charts) bis hin zu spezifischen Details (Tabelle) führt, was einen intuitiven und effizienten Workflow zur Informationsgewinnung ermöglicht, ergänzt durch eine einfache Dateneingabe und schnelle Statusfilterung. -->
+    <!-- Visualization & Content Choices: Jede Visualisierung wurde gewählt, um eine spezifische Frage aus dem Controlling-Kontext zu beantworten und die Mängel der alten Liste zu beheben.
+    - Info: Pipeline Gesamtvolumen, Anzahl Projekte -> Ziel: Schneller Überblick für Management -> Methode: Große KPI-Karten -> Interaktion: Dynamische Aktualisierung bei Filterung -> Justification: Liefert die wichtigsten Zahlen auf einen Blick.
+    - Compare/Organize: Projektstatus (Idee, Antrag, etc.) -> Ziel: Klarheit über den Pipeline-Zustand schaffen -> Methode: Chart.js Doughnut Chart -> Interaktion: Hover für Details, Filterung ändert die Verteilung -> Justification: Zeigt sofort, wo sich die Projekte im Funnel befinden.
+    - Compare: Volumen pro Organisationseinheit (OE) -> Ziel: Leistung der Abteilungen vergleichen -> Methode: Chart.js Bar Chart -> Interaktion: Hover für exakte Werte, Filterung -> Justification: Fördert Transparenz und ermöglicht ressourcenbezogene Entscheidungen.
+    - Change: Finanzprognose nach Jahren -> Ziel: Zukünftige Erträge planen -> Methode: Chart.js Line Chart -> Interaktion: Hover für Jahreswerte, Filterung -> Justification: Essentiell für die strategische Finanzplanung des Instituts.
+    - Organize: Detaillierte Projektliste -> Ziel: Zugriff auf alle Projektdetails und Beseitigung von Dateninkonsistenzen -> Methode: Dynamische HTML-Tabelle mit JS-Filterung -> Interaktion: Globale Filter der Seite wirken sich auf die sichtbaren Zeilen aus -> Justification: Stellt die "Single Source of Truth" dar und ersetzt die unübersichtliche Excel-Tabelle. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .kpi-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            min-width: 800px;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            white-space: nowrap;
+        }
+        thead {
+            background-color: #F3F4F6;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #F9FAFB;
+        }
+        select, input[type="text"], input[type="number"], input[type="date"], textarea {
+            border-radius: 0.375rem;
+            border: 1px solid #D1D5DB;
+            padding: 0.5rem 0.75rem;
+        }
+        .status-button.active {
+            background-color: #3B82F6; /* blue-600 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-stone-900">Interaktives Projekt-Pipeline Dashboard</h1>
+            <p class="text-stone-600 mt-2">Eine moderne Lösung für das Projekt-Controlling am Forschungsinstitut.</p>
+        </header>
+
+        <main>
+            <!-- Data Entry Section -->
+            <section id="data-entry" class="mb-8 p-6 bg-white rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-stone-700">Neues Projekt hinzufügen</h2>
+                <p class="text-stone-600 mb-6">Tragen Sie hier die Details für ein neues Projekt ein. Nach dem Hinzufügen wird das Dashboard automatisch aktualisiert.</p>
+                <form id="add-project-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                        <label for="new-titel" class="block text-sm font-medium text-stone-700 mb-1">Projekttitel</label>
+                        <input type="text" id="new-titel" required class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-oe" class="block text-sm font-medium text-stone-700 mb-1">Organisationseinheit (OE)</label>
+                        <input type="text" id="new-oe" required class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-person" class="block text-sm font-medium text-stone-700 mb-1">Interne Projektleitung</label>
+                        <input type="text" id="new-person" required class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-status" class="block text-sm font-medium text-stone-700 mb-1">Projektstatus</label>
+                        <select id="new-status" required class="w-full bg-white">
+                            <option value="">Status auswählen</option>
+                            <option value="Idee">Idee</option>
+                            <option value="Antragstellung">Antragstellung</option>
+                            <option value="Genehmigt">Genehmigt</option>
+                            <option value="Laufend">Laufend</option>
+                            <option value="Abgeschlossen">Abgeschlossen</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="new-foerderung" class="block text-sm font-medium text-stone-700 mb-1">Förderung / Finanzierung durch</label>
+                        <input type="text" id="new-foerderung" class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-gesamtVolumen" class="block text-sm font-medium text-stone-700 mb-1">Gesamtvolumen (€)</label>
+                        <input type="number" id="new-gesamtVolumen" required min="0" class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-volumenIRB" class="block text-sm font-medium text-stone-700 mb-1">Volumen nur IRB (€)</label>
+                        <input type="number" id="new-volumenIRB" required min="0" class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-start" class="block text-sm font-medium text-stone-700 mb-1">Start (Monat/Jahr)</label>
+                        <input type="date" id="new-start" required class="w-full">
+                    </div>
+                    <div>
+                        <label for="new-laufzeitMonate" class="block text-sm font-medium text-stone-700 mb-1">Laufzeit (Monate)</label>
+                        <input type="number" id="new-laufzeitMonate" required min="1" class="w-full">
+                    </div>
+                    <div class="md:col-span-2 lg:col-span-3">
+                        <label for="new-description" class="block text-sm font-medium text-stone-700 mb-1">Projektbeschreibung</label>
+                        <div class="flex items-center space-x-2">
+                            <textarea id="new-description" rows="3" class="w-full resize-y"></textarea>
+                            <button type="button" id="generate-description-btn" class="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors shadow-md flex-shrink-0">
+                                ✨ Generieren
+                            </button>
+                        </div>
+                        <div id="description-loading" class="mt-2 text-sm text-stone-500 hidden">Generiere Beschreibung...</div>
+                    </div>
+                    <div class="lg:col-span-3 flex justify-end">
+                        <button type="submit" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-md">Projekt hinzufügen</button>
+                    </div>
+                </form>
+                <div id="message-area" class="mt-4 text-center text-sm font-medium"></div>
+            </section>
+
+            <!-- Filter Section -->
+            <section id="filters" class="mb-8 p-6 bg-white rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-stone-700">Analyse-Filter</h2>
+                <p class="text-stone-600 mb-6">Nutzen Sie diese Filter, um die Daten in den Übersichten und Diagrammen dynamisch anzupassen. So können Sie sich auf die Aspekte konzentrieren, die für Ihre Rolle und Ihre Fragen am wichtigsten sind – sei es der Überblick für die Institutsleitung oder die Detailanalyse für eine Abteilung.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label for="oe-filter" class="block text-sm font-medium text-stone-700 mb-1">Organisationseinheit (OE)</label>
+                        <select id="oe-filter" class="w-full bg-white">
+                            <option value="all">Alle Einheiten</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="status-filter" class="block text-sm font-medium text-stone-700 mb-1">Projektstatus</label>
+                        <select id="status-filter" class="w-full bg-white">
+                            <option value="all">Alle Status</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="search-filter" class="block text-sm font-medium text-stone-700 mb-1">Projekttitel oder Beschreibung suchen</label>
+                        <input type="text" id="search-filter" placeholder="Titel/Beschreibung eingeben..." class="w-full">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Status Category Views -->
+            <section id="status-categories" class="mb-8 p-6 bg-white rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-stone-700">Projektstatus Ansichten</h2>
+                <p class="text-stone-600 mb-6">Klicken Sie auf einen Status, um alle Dashboards und die Tabelle nur für Projekte dieses Status zu filtern. Wählen Sie "Alle Status", um die Gesamtübersicht wiederherzustellen.</p>
+                <div id="status-buttons-container" class="flex flex-wrap gap-3">
+                    <button class="status-button px-4 py-2 rounded-lg font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors" data-status="all">Alle Status</button>
+                    <!-- Status buttons will be dynamically added here -->
+                </div>
+            </section>
+
+            <!-- KPIs Section -->
+            <section id="kpis" class="mb-8">
+                 <h2 class="text-xl font-semibold mb-4 text-stone-700">Kennzahlen im Überblick</h2>
+                 <p class="text-stone-600 mb-6">Diese Kennzahlen bieten einen sofortigen, quantitativen Überblick über die gesamte Projektpipeline oder Ihre gefilterte Auswahl. Sie sind ideal für schnelle Management-Einschätzungen und zur Beantwortung grundlegender Fragen zur Pipeline-Gesundheit.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="kpi-card text-center">
+                        <h3 class="text-stone-500 font-medium">Anzahl Projekte</h3>
+                        <p id="kpi-project-count" class="text-4xl font-bold text-blue-600 mt-2">0</p>
+                    </div>
+                    <div class="kpi-card text-center">
+                        <h3 class="text-stone-500 font-medium">Pipeline Volumen (Gesamt)</h3>
+                        <p id="kpi-total-volume" class="text-4xl font-bold text-green-600 mt-2">0 €</p>
+                    </div>
+                    <div class="kpi-card text-center">
+                        <h3 class="text-stone-500 font-medium">Volumen nur IRB</h3>
+                        <p id="kpi-irb-volume" class="text-4xl font-bold text-green-700 mt-2">0 €</p>
+                    </div>
+                    <div class="kpi-card text-center">
+                        <h3 class="text-stone-500 font-medium">Durchschn. Laufzeit</h3>
+                        <p id="kpi-avg-duration" class="text-4xl font-bold text-orange-600 mt-2">0 Monate</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section id="charts" class="mb-8">
+                 <h2 class="text-xl font-semibold mb-4 text-stone-700">Visuelle Analysen</h2>
+                 <p class="text-stone-600 mb-6">Die Diagramme helfen dabei, Muster, Verteilungen und Trends schnell zu erkennen, die in einer reinen Tabellenansicht verborgen bleiben. Interagieren Sie mit den Diagrammen, um Detailinformationen zu erhalten.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="p-6 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-4 text-center">Projekte nach Status</h3>
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-4 text-center">Volumen (nur IRB) pro OE</h3>
+                        <div class="chart-container">
+                            <canvas id="oeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-4 text-center">Finanzprognose (IRB Anteil pro Jahr)</h3>
+                        <div class="chart-container">
+                            <canvas id="financeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold mb-4 text-center">Top 5 Förderquellen (nach Volumen)</h3>
+                         <div class="chart-container">
+                            <canvas id="fundingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Table Section -->
+            <section id="project-table">
+                <h2 class="text-xl font-semibold mb-4 text-stone-700">Projektdetail-Liste</h2>
+                <p class="text-stone-600 mb-6">Hier finden Sie die Detailinformationen zu allen Projekten, die Ihrer aktuellen Filterauswahl entsprechen. Dies ist die zentrale und einheitliche Datenquelle ("Single Source of Truth"), die die unstrukturierte Excel-Liste ersetzt und für Datenkonsistenz sorgt.</p>
+                <div class="bg-white rounded-lg shadow-md table-container">
+                    <table>
+                        <thead class="bg-stone-100">
+                            <tr>
+                                <th>Titel</th>
+                                <th>OE</th>
+                                <th>Leitung</th>
+                                <th>Status</th>
+                                <th>Volumen IRB</th>
+                                <th>Gesamtvolumen</th>
+                                <th>Start</th>
+                                <th>Ende</th>
+                                <th>Förderung</th>
+                                <th>Beschreibung</th>
+                            </tr>
+                        </thead>
+                        <tbody id="project-table-body">
+                            <!-- Rows will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let projectData = [
+                { id: 1, datum: '2024-01-15', oe: 'Robotik', person: 'Dr. Abel', titel: 'Autonome Greifsysteme', foerderung: 'DFG', extPartner: 'TU München', gesamtVolumen: 250000, volumenIRB: 200000, gemeinschaft: true, eigenanteil: 20000, ertragsart: 'Forschung', laufzeitJahre: 3, laufzeitMonate: 36, start: '2025-03-01', ende: '2028-02-28', mitarbeitOE: 'KI-Systeme', status: 'Antragstellung', p2025: 80000, p2026: 80000, p2027: 40000, p2028: 0, p2029: 0, description: 'Dieses Projekt konzentriert sich auf die Entwicklung fortschrittlicher autonomer Greifsysteme für industrielle Anwendungen. Ziel ist die Steigerung der Effizienz und Flexibilität in Produktionsprozessen.' },
+                { id: 2, datum: '2024-02-20', oe: 'KI-Systeme', person: 'Dr. Bäcker', titel: 'KI-gestützte Diagnostik', foerderung: 'BMBF', extPartner: 'Charité Berlin', gesamtVolumen: 450000, volumenIRB: 300000, gemeinschaft: true, eigenanteil: 50000, ertragsart: 'Forschung', laufzeitJahre: 4, laufzeitMonate: 48, start: '2025-01-01', ende: '2028-12-31', mitarbeitOE: 'Medizintechnik', status: 'Genehmigt', p2025: 75000, p2026: 75000, p2027: 75000, p2028: 75000, p2029: 0, description: 'Das Projekt erforscht den Einsatz von Künstlicher Intelligenz zur Verbesserung medizinischer Diagnoseverfahren. Es zielt darauf ab, die Präzision und Geschwindigkeit der Diagnostik zu erhöhen.' },
+                { id: 3, datum: '2024-03-10', oe: 'Medizintechnik', person: 'Dr. Conrad', titel: 'Wearable Sensoren V2', foerderung: 'Industriekooperation', extPartner: 'Siemens Healthineers', gesamtVolumen: 180000, volumenIRB: 180000, gemeinschaft: false, eigenanteil: 0, ertragsart: 'Auftragsforschung', laufzeitJahre: 2, laufzeitMonate: 24, start: '2024-09-01', ende: '2026-08-31', mitarbeitOE: '', status: 'Laufend', p2025: 90000, p2026: 90000, p2027: 0, p2028: 0, p2029: 0, description: 'Dieses Projekt entwickelt die nächste Generation von tragbaren Sensoren für die kontinuierliche Gesundheitsüberwachung. Der Fokus liegt auf verbesserter Genauigkeit und Tragekomfort.' },
+                { id: 4, datum: '2024-04-05', oe: 'Robotik', person: 'Dr. Abel', titel: 'Mensch-Roboter-Kollaboration', foerderung: 'EU Horizon', extPartner: 'INRIA France', gesamtVolumen: 600000, volumenIRB: 250000, gemeinschaft: true, eigenanteil: 25000, ertragsart: 'Forschung', laufzeitJahre: 3, laufzeitMonate: 36, start: '2026-01-01', ende: '2028-12-31', mitarbeitOE: 'KI-Systeme', status: 'Antragstellung', p2025: 0, p2026: 83333, p2027: 83333, p2028: 83334, p2029: 0, description: 'Das Projekt zielt darauf ab, die Zusammenarbeit zwischen Menschen und Robotern in industriellen Umgebungen zu optimieren. Es wird die Sicherheit und Effizienz von kollaborativen Arbeitsplätzen verbessern.' },
+                { id: 5, datum: '2024-05-11', oe: 'Materialwissenschaft', person: 'Dr. Danner', titel: '3D-Druck Leichtmetalle', foerderung: 'Industriekooperation', extPartner: 'Airbus', gesamtVolumen: 220000, volumenIRB: 220000, gemeinschaft: false, eigenanteil: 0, ertragsart: 'Auftragsforschung', laufzeitJahre: 2, laufzeitMonate: 18, start: '2025-06-01', ende: '2026-11-30', mitarbeitOE: '', status: 'Genehmigt', p2025: 73333, p2026: 146667, p2027: 0, p2028: 0, p2029: 0, description: 'Dieses Projekt erforscht den 3D-Druck von Leichtmetallen für Anwendungen in der Luft- und Raumfahrt. Es soll die Entwicklung neuer, gewichtsoptimierter Komponenten ermöglichen.' },
+                { id: 6, datum: '2024-06-01', oe: 'KI-Systeme', person: 'Dr. Eckert', titel: 'Ethik in der KI', foerderung: 'Stiftung Mercator', extPartner: '', gesamtVolumen: 80000, volumenIRB: 80000, gemeinschaft: false, eigenanteil: 10000, ertragsart: 'Forschung', laufzeitJahre: 1, laufzeitMonate: 12, start: '2025-02-01', ende: '2026-01-31', mitarbeitOE: '', status: 'Antragstellung', p2025: 80000, p2026: 0, p2027: 0, p2028: 0, p2029: 0, description: 'Das Projekt befasst sich mit den ethischen Implikationen von Künstlicher Intelligenz in verschiedenen Anwendungsbereichen. Ziel ist die Entwicklung von Richtlinien für einen verantwortungsvollen Einsatz von KI.' },
+                { id: 7, datum: '2024-07-15', oe: 'Medizintechnik', person: 'Dr. Conrad', titel: 'Bildgebungsalgorithmen', foerderung: 'DFG', extPartner: 'Uniklinik Heidelberg', gesamtVolumen: 320000, volumenIRB: 150000, gemeinschaft: true, eigenanteil: 15000, ertragsart: 'Forschung', laufzeitJahre: 3, laufzeitMonate: 36, start: '2026-04-01', ende: '2029-03-31', mitarbeitOE: 'KI-Systeme', status: 'Idee', p2025: 0, p2026: 50000, p2027: 50000, p2028: 50000, p2029: 0, description: 'Dieses Projekt erforscht innovative Algorithmen zur Verbesserung der medizinischen Bildgebung. Der Fokus liegt auf der Erhöhung der Bildqualität und der Extraktion relevanter klinischer Informationen.'},
+                { id: 8, datum: '2023-11-10', oe: 'Robotik', person: 'Dr. Falke', titel: 'Unterwasserrobotik', foerderung: 'BMBF', extPartner: 'GEOMAR', gesamtVolumen: 550000, volumenIRB: 275000, gemeinschaft: true, eigenanteil: 30000, ertragsart: 'Forschung', laufzeitJahre: 4, laufzeitMonate: 48, start: '2024-07-01', ende: '2028-06-30', mitarbeitOE: '', status: 'Laufend', p2025: 68750, p2026: 68750, p2027: 68750, p2028: 68750, p2029: 0, description: 'Das Projekt entwickelt autonome Unterwasserroboter für die Meeresforschung und -überwachung. Es zielt darauf ab, Daten in schwer zugänglichen Meeresumgebungen zu sammeln.' },
+                { id: 9, datum: '2024-08-01', oe: 'Materialwissenschaft', person: 'Dr. Danner', titel: 'Selbstheilende Polymere', foerderung: 'EU Horizon', extPartner: 'BASF', gesamtVolumen: 750000, volumenIRB: 350000, gemeinschaft: true, eigenanteil: 40000, ertragsart: 'Forschung', laufzeitJahre: 3, laufzeitMonate: 36, start: '2026-01-01', ende: '2028-12-31', mitarbeitOE: '', status: 'Idee', p2025: 0, p2026: 116667, p2027: 116667, p2028: 116666, p2029: 0, description: 'Dieses Projekt erforscht die Entwicklung von Polymeren mit der Fähigkeit zur Selbstheilung. Das Ziel ist die Verlängerung der Lebensdauer von Materialien und die Reduzierung von Wartungskosten.' },
+                { id: 10, datum: '2024-08-05', oe: 'KI-Systeme', person: 'Dr. Bäcker', titel: 'Natural Language Processing für jur. Texte', foerderung: 'Industriekooperation', extPartner: 'DATEV', gesamtVolumen: 120000, volumenIRB: 120000, gemeinschaft: false, eigenanteil: 0, ertragsart: 'Auftragsforschung', laufzeitJahre: 1, laufzeitMonate: 12, start: '2025-01-01', ende: '2025-12-31', mitarbeitOE: '', status: 'Genehmigt', p2025: 120000, p2026: 0, p2027: 0, p2028: 0, p2029: 0, description: 'Das Projekt entwickelt NLP-Modelle speziell für die Analyse und Verarbeitung juristischer Texte. Es soll die Effizienz bei der Recherche und Bearbeitung rechtlicher Dokumente verbessern.'},
+                { id: 11, datum: '2023-09-01', oe: 'Robotik', person: 'Dr. Abel', titel: 'Logistikdrohnen-Schwärme', foerderung: 'Industriekooperation', extPartner: 'Deutsche Post DHL', gesamtVolumen: 400000, volumenIRB: 400000, gemeinschaft: false, eigenanteil: 0, ertragsart: 'Auftragsforschung', laufzeitJahre: 2, laufzeitMonate: 24, start: '2024-01-01', ende: '2025-12-31', mitarbeitOE: '', status: 'Laufend', p2025: 200000, p2026: 0, p2027: 0, p2028: 0, p2029: 0, description: 'Dieses Projekt erforscht den Einsatz von Drohnenschwärmen für autonome Logistikaufgaben. Ziel ist die Optimierung von Lieferketten und die Reduzierung von Transportzeiten.' }
+            ];
+
+            const oeFilter = document.getElementById('oe-filter');
+            const statusFilter = document.getElementById('status-filter');
+            const searchFilter = document.getElementById('search-filter');
+            const tableBody = document.getElementById('project-table-body');
+            
+            const kpiProjectCount = document.getElementById('kpi-project-count');
+            const kpiTotalVolume = document.getElementById('kpi-total-volume');
+            const kpiIrbVolume = document.getElementById('kpi-irb-volume');
+            const kpiAvgDuration = document.getElementById('kpi-avg-duration');
+
+            const addProjectForm = document.getElementById('add-project-form');
+            const messageArea = document.getElementById('message-area');
+            const statusButtonsContainer = document.getElementById('status-buttons-container');
+            const generateDescriptionBtn = document.getElementById('generate-description-btn');
+            const newDescriptionField = document.getElementById('new-description');
+            const descriptionLoading = document.getElementById('description-loading');
+            
+            const chartColors = {
+                blue: 'rgba(59, 130, 246, 0.7)',
+                green: 'rgba(16, 185, 129, 0.7)',
+                orange: 'rgba(249, 115, 22, 0.7)',
+                purple: 'rgba(139, 92, 246, 0.7)',
+                pink: 'rgba(236, 72, 153, 0.7)',
+                teal: 'rgba(20, 184, 166, 0.7)',
+                red: 'rgba(239, 68, 68, 0.7)'
+            };
+
+            let statusChart, oeChart, financeChart, fundingChart;
+
+            function formatCurrency(value) {
+                return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
+            }
+
+            function populateFilters() {
+                // Clear existing options first (except "Alle Einheiten"/"Alle Status")
+                oeFilter.innerHTML = '<option value="all">Alle Einheiten</option>';
+                statusFilter.innerHTML = '<option value="all">Alle Status</option>';
+
+                const oes = [...new Set(projectData.map(p => p.oe))];
+                oes.sort().forEach(oe => {
+                    const option = document.createElement('option');
+                    option.value = oe;
+                    option.textContent = oe;
+                    oeFilter.appendChild(option);
+                });
+
+                const statuses = [...new Set(projectData.map(p => p.status))];
+                statuses.sort().forEach(status => {
+                    const option = document.createElement('option');
+                    option.value = status;
+                    option.textContent = status;
+                    statusFilter.appendChild(option);
+                });
+            }
+
+            function populateStatusButtons() {
+                // Clear existing buttons except "Alle Status"
+                const existingButtons = statusButtonsContainer.querySelectorAll('.status-button:not([data-status="all"])');
+                existingButtons.forEach(button => button.remove());
+
+                const statuses = [...new Set(projectData.map(p => p.status))];
+                statuses.sort().forEach(status => {
+                    const button = document.createElement('button');
+                    button.className = 'status-button px-4 py-2 rounded-lg font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors';
+                    button.textContent = status;
+                    button.dataset.status = status;
+                    button.addEventListener('click', () => {
+                        statusFilter.value = status;
+                        applyFiltersAndRender();
+                        highlightActiveStatusButton(status);
+                    });
+                    statusButtonsContainer.appendChild(button);
+                });
+
+                // Add event listener for "Alle Status" button
+                const allStatusButton = statusButtonsContainer.querySelector('[data-status="all"]');
+                allStatusButton.addEventListener('click', () => {
+                    statusFilter.value = 'all';
+                    applyFiltersAndRender();
+                    highlightActiveStatusButton('all');
+                });
+                highlightActiveStatusButton(statusFilter.value); // Initial highlight
+            }
+
+            function highlightActiveStatusButton(activeStatus) {
+                document.querySelectorAll('.status-button').forEach(button => {
+                    if (button.dataset.status === activeStatus) {
+                        button.classList.add('active');
+                    } else {
+                        button.classList.remove('active');
+                    }
+                });
+            }
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                if (data.length === 0) {
+                    const row = tableBody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 10; // Increased colspan for new Description column
+                    cell.textContent = 'Keine Projekte für die aktuellen Filter gefunden.';
+                    cell.className = 'text-center py-8 text-stone-500';
+                    return;
+                }
+                data.forEach(p => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td class="font-medium text-stone-900">${p.titel}</td>
+                        <td>${p.oe}</td>
+                        <td>${p.person}</td>
+                        <td><span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(p.status)}">${p.status}</span></td>
+                        <td>${formatCurrency(p.volumenIRB)}</td>
+                        <td>${formatCurrency(p.gesamtVolumen)}</td>
+                        <td>${new Date(p.start).toLocaleDateString('de-DE', {month: '2-digit', year: 'numeric'})}</td>
+                        <td>${new Date(p.ende).toLocaleDateString('de-DE', {month: '2-digit', year: 'numeric'})}</td>
+                        <td>${p.foerderung}</td>
+                        <td class="text-sm text-stone-700 max-w-xs overflow-hidden text-ellipsis whitespace-normal">${p.description || 'N/A'}</td>
+                    `;
+                });
+            }
+            
+            function getStatusColor(status) {
+                switch(status) {
+                    case 'Laufend': return 'bg-blue-100 text-blue-800';
+                    case 'Genehmigt': return 'bg-green-100 text-green-800';
+                    case 'Antragstellung': return 'bg-yellow-100 text-yellow-800';
+                    case 'Idee': return 'bg-purple-100 text-purple-800';
+                    case 'Abgeschlossen': return 'bg-stone-100 text-stone-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            }
+
+            function updateKPIs(data) {
+                const projectCount = data.length;
+                const totalVolume = data.reduce((sum, p) => sum + p.gesamtVolumen, 0);
+                const irbVolume = data.reduce((sum, p) => sum + p.volumenIRB, 0);
+                const totalDuration = data.reduce((sum, p) => sum + p.laufzeitMonate, 0);
+                const avgDuration = projectCount > 0 ? (totalDuration / projectCount).toFixed(1) : 0;
+
+                kpiProjectCount.textContent = projectCount;
+                kpiTotalVolume.textContent = formatCurrency(totalVolume);
+                kpiIrbVolume.textContent = formatCurrency(irbVolume);
+                kpiAvgDuration.textContent = `${avgDuration} Monate`;
+            }
+
+            function initializeCharts() {
+                const defaultOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        label += formatCurrency(context.parsed.y);
+                                    } else if(context.parsed !== null) {
+                                        label += (context.chart.config.type === 'pie' || context.chart.config.type === 'doughnut') ? context.parsed : formatCurrency(context.parsed);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                };
+                
+                statusChart = new Chart(document.getElementById('statusChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: Object.values(chartColors) }] },
+                    options: defaultOptions
+                });
+
+                oeChart = new Chart(document.getElementById('oeChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ label: 'Volumen IRB', data: [], backgroundColor: chartColors.green }] },
+                    options: { ...defaultOptions, indexAxis: 'y' }
+                });
+
+                financeChart = new Chart(document.getElementById('financeChart').getContext('2d'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ label: 'Volumen IRB', data: [], backgroundColor: chartColors.blue, borderColor: chartColors.blue, fill: true, tension: 0.1 }] },
+                    options: defaultOptions
+                });
+
+                fundingChart = new Chart(document.getElementById('fundingChart').getContext('2d'), {
+                    type: 'pie',
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: Object.values(chartColors).reverse() }] },
+                    options: defaultOptions
+                });
+            }
+
+            function updateCharts(data) {
+                updateStatusChart(data);
+                updateOeChart(data);
+                updateFinanceChart(data);
+                updateFundingChart(data);
+            }
+
+            function updateStatusChart(data) {
+                const statusCounts = data.reduce((acc, p) => {
+                    acc[p.status] = (acc[p.status] || 0) + 1;
+                    return acc;
+                }, {});
+                statusChart.data.labels = Object.keys(statusCounts);
+                statusChart.data.datasets[0].data = Object.values(statusCounts);
+                statusChart.update();
+            }
+
+            function updateOeChart(data) {
+                const oeVolumes = data.reduce((acc, p) => {
+                    acc[p.oe] = (acc[p.oe] || 0) + p.volumenIRB;
+                    return acc;
+                }, {});
+                const sortedOes = Object.entries(oeVolumes).sort(([,a],[,b]) => b-a);
+                oeChart.data.labels = sortedOes.map(entry => entry[0]);
+                oeChart.data.datasets[0].data = sortedOes.map(entry => entry[1]);
+                oeChart.update();
+            }
+
+            function updateFinanceChart(data) {
+                const years = ['2025', '2026', '2027', '2028', '2029'];
+                const financeData = years.map(year => {
+                    return data.reduce((sum, p) => sum + (p['p' + year] || 0), 0);
+                });
+                financeChart.data.labels = years;
+                financeChart.data.datasets[0].data = financeData;
+                financeChart.update();
+            }
+
+            function updateFundingChart(data) {
+                 const fundingVolumes = data.reduce((acc, p) => {
+                    acc[p.foerderung] = (acc[p.foerderung] || 0) + p.volumenIRB;
+                    return acc;
+                }, {});
+                const sortedFunding = Object.entries(fundingVolumes).sort(([, a], [, b]) => b - a).slice(0, 5);
+                fundingChart.data.labels = sortedFunding.map(entry => entry[0]);
+                fundingChart.data.datasets[0].data = sortedFunding.map(entry => entry[1]);
+                fundingChart.update();
+            }
+
+            function calculateYearlyVolumes(volumenIRB, startDate, durationMonths) {
+                const yearlyVolumes = { p2025: 0, p2026: 0, p2027: 0, p2028: 0, p2029: 0 };
+                const start = new Date(startDate);
+                const end = new Date(start);
+                end.setMonth(end.getMonth() + durationMonths);
+
+                const monthlyVolume = volumenIRB / durationMonths;
+
+                for (let year = 2025; year <= 2029; year++) {
+                    let yearStart = new Date(year, 0, 1);
+                    let yearEnd = new Date(year, 11, 31);
+
+                    let overlapStart = new Date(Math.max(start.getTime(), yearStart.getTime()));
+                    let overlapEnd = new Date(Math.min(end.getTime(), yearEnd.getTime()));
+
+                    if (overlapStart < overlapEnd) {
+                        let current = new Date(overlapStart);
+                        let count = 0;
+                        while(current < overlapEnd) {
+                            count++;
+                            current.setMonth(current.getMonth() + 1);
+                        }
+                        yearlyVolumes['p' + year] = Math.round(monthlyVolume * count);
+                    }
+                }
+                return yearlyVolumes;
+            }
+
+
+            function applyFiltersAndRender() {
+                const selectedOe = oeFilter.value;
+                const selectedStatus = statusFilter.value;
+                const searchTerm = searchFilter.value.toLowerCase();
+
+                const filteredData = projectData.filter(p => {
+                    const oeMatch = selectedOe === 'all' || p.oe === selectedOe;
+                    const statusMatch = selectedStatus === 'all' || p.status === selectedStatus;
+                    const searchMatch = p.titel.toLowerCase().includes(searchTerm) || (p.description && p.description.toLowerCase().includes(searchTerm));
+                    return oeMatch && statusMatch && searchMatch;
+                });
+
+                renderTable(filteredData);
+                updateKPIs(filteredData);
+                updateCharts(filteredData);
+                highlightActiveStatusButton(selectedStatus); // Ensure button highlights correctly after filter change
+            }
+
+            // Gemini API Integration
+            generateDescriptionBtn.addEventListener('click', async () => {
+                const titel = document.getElementById('new-titel').value;
+                const oe = document.getElementById('new-oe').value;
+                const status = document.getElementById('new-status').value;
+
+                if (!titel || !oe || !status) {
+                    messageArea.textContent = 'Bitte Titel, OE und Status eingeben, um eine Beschreibung zu generieren.';
+                    messageArea.className = 'mt-4 text-center text-sm font-medium text-red-600';
+                    setTimeout(() => {
+                        messageArea.textContent = '';
+                        messageArea.className = 'mt-4 text-center text-sm font-medium';
+                    }, 5000);
+                    return;
+                }
+
+                descriptionLoading.classList.remove('hidden');
+                newDescriptionField.value = ''; // Clear previous description
+
+                try {
+                    const prompt = `Generiere eine kurze, professionelle Projektbeschreibung für ein Forschungsprojekt mit dem Titel '${titel}' in der Organisationseinheit '${oe}' mit dem aktuellen Status '${status}'. Fokus auf die Ziele und den erwarteten Nutzen des Projekts. Die Beschreibung sollte etwa 2-3 Sätze lang sein.`;
+                    
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        newDescriptionField.value = generatedText;
+                    } else {
+                        newDescriptionField.value = 'Konnte keine Beschreibung generieren. Bitte versuchen Sie es erneut.';
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Generieren der Beschreibung:', error);
+                    newDescriptionField.value = 'Fehler beim Generieren der Beschreibung. Bitte prüfen Sie die Konsole.';
+                } finally {
+                    descriptionLoading.classList.add('hidden');
+                }
+            });
+
+
+            // Event Listener for Add Project Form
+            addProjectForm.addEventListener('submit', (event) => {
+                event.preventDefault(); // Prevent default form submission
+
+                const newTitel = document.getElementById('new-titel').value;
+                const newOe = document.getElementById('new-oe').value;
+                const newPerson = document.getElementById('new-person').value;
+                const newStatus = document.getElementById('new-status').value;
+                const newFoerderung = document.getElementById('new-foerderung').value;
+                const newGesamtVolumen = parseFloat(document.getElementById('new-gesamtVolumen').value);
+                const newVolumenIRB = parseFloat(document.getElementById('new-volumenIRB').value);
+                const newStart = document.getElementById('new-start').value;
+                const newLaufzeitMonate = parseInt(document.getElementById('new-laufzeitMonate').value, 10);
+                const newDescription = document.getElementById('new-description').value; // Get generated description
+
+                if (!newTitel || !newOe || !newPerson || !newStatus || isNaN(newGesamtVolumen) || isNaN(newVolumenIRB) || !newStart || isNaN(newLaufzeitMonate)) {
+                    messageArea.textContent = 'Bitte füllen Sie alle erforderlichen Felder aus.';
+                    messageArea.className = 'mt-4 text-center text-sm font-medium text-red-600';
+                    return;
+                }
+
+                const newId = projectData.length > 0 ? Math.max(...projectData.map(p => p.id)) + 1 : 1;
+                const newDatum = new Date().toISOString().slice(0, 10); // Current date
+                
+                const startDateObj = new Date(newStart);
+                const endDateObj = new Date(startDateObj);
+                endDateObj.setMonth(endDateObj.getMonth() + newLaufzeitMonate);
+                endDateObj.setDate(endDateObj.getDate() -1); // Adjust to end of month
+
+                const yearlyVolumes = calculateYearlyVolumes(newVolumenIRB, newStart, newLaufzeitMonate);
+
+                const newProject = {
+                    id: newId,
+                    datum: newDatum,
+                    oe: newOe,
+                    person: newPerson,
+                    titel: newTitel,
+                    foerderung: newFoerderung,
+                    extPartner: '', // Not collected in form for simplicity
+                    gesamtVolumen: newGesamtVolumen,
+                    volumenIRB: newVolumenIRB,
+                    gemeinschaft: false, // Not collected in form for simplicity
+                    eigenanteil: 0, // Not collected in form for simplicity
+                    ertragsart: 'Forschung', // Default for simplicity
+                    laufzeitJahre: Math.floor(newLaufzeitMonate / 12),
+                    laufzeitMonate: newLaufzeitMonate,
+                    start: newStart,
+                    ende: endDateObj.toISOString().slice(0, 10),
+                    mitarbeitOE: '', // Not collected in form for simplicity
+                    status: newStatus,
+                    p2025: yearlyVolumes.p2025,
+                    p2026: yearlyVolumes.p2026,
+                    p2027: yearlyVolumes.p2027,
+                    p2028: yearlyVolumes.p2028,
+                    p2029: yearlyVolumes.p2029,
+                    description: newDescription // Add the generated description
+                };
+
+                projectData.push(newProject);
+                
+                // Update filters and status buttons with new OE/Status if any
+                populateFilters();
+                populateStatusButtons();
+
+                applyFiltersAndRender(); // Re-render all elements with new data
+
+                // Show success message
+                messageArea.textContent = 'Projekt erfolgreich hinzugefügt!';
+                messageArea.className = 'mt-4 text-center text-sm font-medium text-green-600';
+                addProjectForm.reset(); // Clear the form
+                newDescriptionField.value = ''; // Clear description field too
+
+                // Hide message after a few seconds
+                setTimeout(() => {
+                    messageArea.textContent = '';
+                    messageArea.className = 'mt-4 text-center text-sm font-medium';
+                }, 5000);
+            });
+
+            populateFilters();
+            populateStatusButtons(); // Populate buttons initially
+            initializeCharts();
+            applyFiltersAndRender(); 
+
+            oeFilter.addEventListener('change', applyFiltersAndRender);
+            statusFilter.addEventListener('change', applyFiltersAndRender);
+            searchFilter.addEventListener('input', applyFiltersAndRender);
+        });
+    </script>
+</body>
+</html>
